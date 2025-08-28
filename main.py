@@ -5,9 +5,6 @@ from dotenv import load_dotenv
 import os
 import webserver
 
-bot=BOT(token=os.environ.get('token'))
-dp=Dispatcher(bot)
-
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 
@@ -90,5 +87,6 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
