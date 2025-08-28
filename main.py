@@ -4,8 +4,6 @@ import logging
 from dotenv import load_dotenv
 import os
 import webserver
-from keep_alive import keep_alive
-keep_alive()
 
 bot=BOT(token=os.environ.get('token'))
 dp=Dispatcher(bot)
@@ -92,4 +90,5 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
