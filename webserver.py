@@ -1,4 +1,4 @@
-from flash import Flask
+from flask import Flask
 from threading import Thread
 
 app = Flash('')
@@ -11,4 +11,5 @@ def run():
 
 def keep_alive():
     t=Thread(target=run)
+
     t.start()
