@@ -249,42 +249,33 @@ def parse_time(time_str: str) -> int:
     total_seconds = 0
     for value, unit in time_regex:
         value = int(value)
-        if unit == "d":
-            total_seconds += value * 86400
-        elif unit == "h":
-            total_seconds += value * 3600
-        elif unit == "m":
-            total_seconds += value * 60
-        elif unit == "s":
-            total_seconds += value
+        if unit == "d": total_seconds += value * 86400
+        elif unit == "h": total_seconds += value * 3600
+        elif unit == "m": total_seconds += value * 60
+        elif unit == "s": total_seconds += value
     return total_seconds
 
 
 def format_time(seconds: int) -> str:
-    """Convert seconds back into d h m s format"""
+    """Convert seconds to 1d 2h 3m 4s format"""
     days, seconds = divmod(seconds, 86400)
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
-
     parts = []
     if days: parts.append(f"{days}d")
     if hours: parts.append(f"{hours}h")
     if minutes: parts.append(f"{minutes}m")
     if seconds: parts.append(f"{seconds}s")
-
     return " ".join(parts)
 
 
 @bot.command()
 async def poll(ctx, duration: str, *, question: str):
-    """
-    Create a timed poll with continuous countdown.
-    Usage: !poll 1h30m Do you like pizza?
-    """
+    """Create a poll with countdown. Example: !poll 1h30m Do you like pizza?"""
 
     total_seconds = parse_time(duration)
     if total_seconds <= 0:
-        await ctx.send("❌ Invalid time format! Example: `1h30m`, `2d`, `45s`")
+        await ctx.send("❌ Invalid time! Example: `1h30m`, `2d`, `45s`")
         return
 
     end_time = time.time() + total_seconds
@@ -303,42 +294,61 @@ async def poll(ctx, duration: str, *, question: str):
     active_polls[poll_message.id] = {
         "end_time": end_time,
         "question": question,
-        "channel_id": ctx.channel.id
+        "channel": ctx.channel
     }
 
-    # Continuous countdown updater
+    await ctx.send(f"✅ Poll created! (ID: `{poll_message.id}`)")
+
+    # Update countdown
     while poll_message.id in active_polls:
         remaining = int(end_time - time.time())
         if remaining <= 0:
             break
         embed.set_footer(text=f"Time remaining: {format_time(remaining)}")
-        await poll_message.edit(embed=embed)
-        await asyncio.sleep(10)  # updates every 10 seconds
+        try:
+            await poll_message.edit(embed=embed)
+        except discord.NotFound:
+            break
+        await asyncio.sleep(10)
 
-    if poll_message.id in active_polls:  # not closed manually
+    # Auto close
+    if poll_message.id in active_polls:
         await close_poll(poll_message.id, ctx.channel)
 
 
 @bot.command()
-async def closepoll(ctx, message_id: int):
+async def closepoll(ctx, message_id: int = None):
+    """Close a poll manually. 
+    Usage:
+    !closepoll → closes latest poll in this channel
+    !closepoll <id> → closes a specific poll
     """
-    Manually close a poll by its message ID.
-    Usage: !closepoll 123456789012345678
-    """
+    if message_id is None:
+        # Get the latest poll in this channel
+        polls_in_channel = [
+            pid for pid, info in active_polls.items()
+            if info["channel"].id == ctx.channel.id
+        ]
+        if not polls_in_channel:
+            await ctx.send("❌ No active polls in this channel.")
+            return
+        message_id = polls_in_channel[-1]  # last created poll in this channel
+
     if message_id not in active_polls:
-        await ctx.send("❌ No active poll found with that ID.")
+        await ctx.send("❌ No active poll with that ID.")
         return
 
-    poll_info = active_polls[message_id]
-    channel = bot.get_channel(poll_info["channel_id"])
-    await close_poll(message_id, channel)
-    await ctx.send(f"✅ Poll `{poll_info['question']}` closed manually.")
+    await close_poll(message_id, ctx.channel)
+    await ctx.send("✅ Poll closed.")
 
 
 async def close_poll(message_id: int, channel):
-    """Helper function to finalize a poll"""
+    """Finalize a poll"""
     poll_info = active_polls[message_id]
-    msg = await channel.fetch_message(message_id)
+    try:
+        msg = await channel.fetch_message(message_id)
+    except discord.NotFound:
+        return
 
     thumbs_up = discord.utils.get(msg.reactions, emoji="👍")
     thumbs_down = discord.utils.get(msg.reactions, emoji="👎")
@@ -354,7 +364,7 @@ async def close_poll(message_id: int, channel):
     await msg.edit(embed=result_embed)
     await msg.clear_reactions()
 
-    del active_polls[message_id]         
+    del active_polls[message_id]
 
 #Ban, Unban, Timeout, Kick                     
 # BAN
@@ -420,6 +430,7 @@ async def banned(ctx):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
