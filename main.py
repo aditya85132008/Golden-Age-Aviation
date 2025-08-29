@@ -138,6 +138,40 @@ async def taf(ctx, icao: str):
     except Exception as e:
         await ctx.send(f"❌ Error fetching TAF: {e}")
 
+#Verification
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    channel = bot.get_channel(1410464974152794212)
+
+    # Send verification embed once when bot starts
+    embed = discord.Embed(
+        title="🔒 Server Verification",
+        description="Click the **Verify** button below to get access to the server.",
+        color=discord.Color.blue()
+    )
+
+    button = Button(label="✅ Verify", style=discord.ButtonStyle.success)
+
+    async def button_callback(interaction: discord.Interaction):
+        role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
+        if role is None:
+            await interaction.response.send_message("❌ Verification role not found! Please ask an admin.", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.response.send_message("⚠️ You are already verified!", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message("✅ You have been verified!", ephemeral=True)
+
+    button.callback = button_callback
+
+    view = View()
+    view.add_item(button)
+
+    await channel.send(embed=embed, view=view)
+
 #Purging
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -169,6 +203,7 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
