@@ -163,7 +163,28 @@ async def taf(ctx, icao: str):
             await ctx.send("⚠️ Invalid ICAO code or data unavailable.")
     except Exception as e:
         await ctx.send(f"❌ Error fetching TAF: {e}")
-    
+
+#Purging
+@bot.command()
+@commands.has_permissions(manage_messages=True)
+async def purge(ctx, amount: int, channel: discord.TextChannel = None, member: discord.Member = None):
+    """
+    Purge messages in a channel.
+    Usage:
+    !purge 10                  -> Deletes 10 messages in current channel
+    !purge 20 #channel         -> Deletes 20 messages in another channel
+    !purge 30 #channel @user   -> Deletes 30 messages from a user in that channel
+    """
+
+    # If no channel is mentioned, use current one
+    target_channel = channel or ctx.channel
+
+    def check(msg):
+        return (member is None or msg.author == member)
+
+    deleted = await target_channel.purge(limit=amount, check=check)
+    confirm = await ctx.send(f"✅ Deleted {len(deleted)} messages in {target_channel.mention}", delete_after=1)
+        
 #POLL
 @bot.command()
 async def poll(ctx, *, question):
@@ -174,6 +195,7 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
