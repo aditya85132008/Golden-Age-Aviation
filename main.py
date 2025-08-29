@@ -40,28 +40,6 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-@bot.command()
-async def hello(ctx):
-    await ctx.send(f"Hello {ctx.author.mention}!")
-
-@bot.command()
-async def assign(ctx):
-    role = discord.utils.get(ctx.guild.roles, name=ranks)
-    if role:
-        await ctx.author.add_roles(role)
-        await ctx.send(f"{ctx.author.mention} is now assigned to {ranks}")
-    else:
-        await ctx.send("Role doesn't exist")
-
-@bot.command()
-async def remove(ctx):
-    role = discord.utils.get(ctx.guild.roles, name=ranks)
-    if role:
-        await ctx.author.remove_roles(role)
-        await ctx.send(f"{ctx.author.mention} has had the {ranks} removed")
-    else:
-        await ctx.send("Role doesn't exist")
-
 #Embed Message
 @bot.command()
 async def sendembed(ctx, channel: discord.TextChannel, title: str, color: str, thumbnail_url: str, image_url: str, *, content: str):
@@ -191,6 +169,7 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
