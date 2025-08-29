@@ -139,21 +139,13 @@ async def taf(ctx, icao: str):
         await ctx.send(f"❌ Error fetching TAF: {e}")
 
 #Verification
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    channel = bot.get_channel(1410464974152794212)
+# Custom persistent view with Verify button
+class VerifyView(View):
+    def __init__(self):
+        super().__init__(timeout=None)
 
-    # Send verification embed once when bot starts
-    embed = discord.Embed(
-        title="🔒 Server Verification",
-        description="Click the **Verify** button below to get access to the server.",
-        color=discord.Color.blue()
-    )
-
-    button = Button(label="✅ Verify", style=discord.ButtonStyle.success)
-
-    async def button_callback(interaction: discord.Interaction):
+    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.success, custom_id="verify_button")
+    async def verify_button(self, interaction: discord.Interaction, button: Button):
         role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
         if role is None:
             await interaction.response.send_message("❌ Verification role not found! Please ask an admin.", ephemeral=True)
@@ -165,12 +157,24 @@ async def on_ready():
             await interaction.user.add_roles(role)
             await interaction.response.send_message("✅ You have been verified!", ephemeral=True)
 
-    button.callback = button_callback
+# Command to set up verification in a chosen channel
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setupverify(ctx, channel: discord.TextChannel):
+    embed = discord.Embed(
+        title="🔒 Server Verification",
+        description="Click the **✅ Verify** button below to gain access to the server.",
+        color=discord.Color.green()
+    )
+    await channel.send(embed=embed, view=VerifyView())
+    await ctx.send(f"✅ Verification system has been set up in {channel.mention}", delete_after=5)
 
-    view = View()
-    view.add_item(button)
-
-    await channel.send(embed=embed, view=view)
+# When the bot is ready
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    # Register persistent view (keeps buttons alive after restart)
+    bot.add_view(VerifyView())
 
 #Purging
 @bot.command()
@@ -203,6 +207,7 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
