@@ -45,7 +45,7 @@ async def on_message(message):
     await bot.process_commands(message)
 
 #Verification
-# Create Verify button
+
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setupverify(ctx):
@@ -311,6 +311,7 @@ async def banned(ctx):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
