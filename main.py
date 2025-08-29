@@ -27,6 +27,7 @@ intents.guilds = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 ranks= "Cadet"
 VERIFICATION_ROLE_NAME="Verified"
+LOG_CHANNEL_ID = 1410457088290721812
 
 @bot.event
 async def on_ready():
@@ -400,5 +401,75 @@ async def banned(ctx):
 
     await ctx.send(msg)
 
+#LOGS
+def get_log_channel(guild):
+    return guild.get_channel(LOG_CHANNEL_ID)
+
+# Log message edits
+@bot.event
+async def on_message_edit(before, after):
+    if before.author == bot.user:
+        return
+    log_channel = get_log_channel(before.guild)
+    if log_channel and before.content != after.content:
+        await log_channel.send(
+            f"✏️ **Message edited** by {before.author} in {before.channel.mention}:\n"
+            f"Before: {before.content}\nAfter: {after.content}"
+        )
+
+# Log bulk deletes
+@bot.event
+async def on_bulk_message_delete(messages):
+    if not messages:
+        return
+    guild = messages[0].guild
+    channel = messages[0].channel
+    log_channel = get_log_channel(guild)
+    if log_channel:
+        await log_channel.send(
+            f"🗑️ **Bulk delete** in {channel.mention}:\n"
+            f"{len(messages)} messages were deleted."
+        )
+
+# Log member joins
+@bot.event
+async def on_member_join(member):
+    log_channel = get_log_channel(member.guild)
+    if log_channel:
+        await log_channel.send(f"✅ **Member joined:** {member.mention} ({member})")
+
+# Log member leaves
+@bot.event
+async def on_member_remove(member):
+    log_channel = get_log_channel(member.guild)
+    if log_channel:
+        await log_channel.send(f"❌ **Member left:** {member.mention} ({member})")
+
+# Log role changes
+@bot.event
+async def on_member_update(before, after):
+    log_channel = get_log_channel(before.guild)
+    if log_channel:
+        added_roles = [r.name for r in after.roles if r not in before.roles]
+        removed_roles = [r.name for r in before.roles if r not in after.roles]
+
+        if added_roles:
+            await log_channel.send(
+                f"➕ **Roles added** to {after.mention}: {', '.join(added_roles)}"
+            )
+        if removed_roles:
+            await log_channel.send(
+                f"➖ **Roles removed** from {after.mention}: {', '.join(removed_roles)}"
+            )
+
+# Command to set the log channel
+@bot.command()
+@commands.has_permissions(administrator=True)
+async def setlog(ctx, channel: discord.TextChannel):
+    global LOG_CHANNEL_ID
+    LOG_CHANNEL_ID = channel.id
+    await ctx.send(f"✅ Logging enabled in {channel.mention}")
+
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
