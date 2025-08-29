@@ -66,6 +66,62 @@ async def remove(ctx):
     else:
         await ctx.send("Role doesn't exist")
 
+#Embed Message
+@bot.command()
+async def sendembed(ctx, channel: discord.TextChannel, title: str, color: str, thumbnail_url: str, image_url: str, *, content: str):
+    """
+    Send a fully customizable embedded message with fields and image.
+    Usage:
+    !sendembed #channel "Title" blue "https://thumb.url" "https://image.url" description here || Field1: Value1 || Field2: Value2
+    """
+
+    # Handle color input (hex or named)
+    color = color.lower()
+    if color.startswith("#"):
+        embed_color = discord.Color(int(color[1:], 16))  # hex like #ff0000
+    else:
+        colors = {
+            "red": discord.Color.red(),
+            "blue": discord.Color.blue(),
+            "green": discord.Color.green(),
+            "purple": discord.Color.purple(),
+            "gold": discord.Color.gold(),
+            "orange": discord.Color.orange(),
+            "teal": discord.Color.teal(),
+            "default": discord.Color.default()
+        }
+        embed_color = colors.get(color, discord.Color.default())
+
+    # Split description and fields
+    parts = content.split("||")
+    description = parts[0].strip()
+    fields = parts[1:] if len(parts) > 1 else []
+
+    # Create embed
+    embed = discord.Embed(
+        title=title,
+        description=description,
+        color=embed_color
+    )
+
+    # Thumbnail
+    if thumbnail_url.lower() != "none":
+        embed.set_thumbnail(url=thumbnail_url)
+
+    # Big Image
+    if image_url.lower() != "none":
+        embed.set_image(url=image_url)
+
+    # Add fields
+    for field in fields:
+        if ":" in field:
+            name, value = field.split(":", 1)
+            embed.add_field(name=name.strip(), value=value.strip(), inline=False)
+
+    # Send embed
+    await channel.send(embed=embed)
+    await ctx.send(f"✅ Embed sent to {channel.mention}")
+
 #METAR
 @bot.command()
 async def metar(ctx, icao: str):
