@@ -7,6 +7,9 @@ from dotenv import load_dotenv
 import os
 import webserver
 import requests
+import asyncio
+import re
+import time
 
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
@@ -240,12 +243,118 @@ async def purge(ctx, amount: int, channel: discord.TextChannel = None, member: d
     confirm = await ctx.send(f"✅ Deleted {len(deleted)} messages in {target_channel.mention}", delete_after=1)
     
 #POLL
+def parse_time(time_str: str) -> int:
+    """Convert 1h30m, 2d, 45s style into seconds"""
+    time_regex = re.findall(r"(\d+)([dhms])", time_str.lower())
+    total_seconds = 0
+    for value, unit in time_regex:
+        value = int(value)
+        if unit == "d":
+            total_seconds += value * 86400
+        elif unit == "h":
+            total_seconds += value * 3600
+        elif unit == "m":
+            total_seconds += value * 60
+        elif unit == "s":
+            total_seconds += value
+    return total_seconds
+
+
+def format_time(seconds: int) -> str:
+    """Convert seconds back into d h m s format"""
+    days, seconds = divmod(seconds, 86400)
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+
+    parts = []
+    if days: parts.append(f"{days}d")
+    if hours: parts.append(f"{hours}h")
+    if minutes: parts.append(f"{minutes}m")
+    if seconds: parts.append(f"{seconds}s")
+
+    return " ".join(parts)
+
+
 @bot.command()
-async def poll(ctx, *, question):
-    embed = discord.Embed(title="New Poll", description=question)
+async def poll(ctx, duration: str, *, question: str):
+    """
+    Create a timed poll with continuous countdown.
+    Usage: !poll 1h30m Do you like pizza?
+    """
+
+    total_seconds = parse_time(duration)
+    if total_seconds <= 0:
+        await ctx.send("❌ Invalid time format! Example: `1h30m`, `2d`, `45s`")
+        return
+
+    end_time = time.time() + total_seconds
+
+    embed = discord.Embed(
+        title="📊 New Poll",
+        description=question,
+        color=discord.Color.blue()
+    )
+    embed.set_footer(text=f"Time remaining: {format_time(total_seconds)}")
+
     poll_message = await ctx.send(embed=embed)
     await poll_message.add_reaction("👍")
-    await poll_message.add_reaction("👎")          
+    await poll_message.add_reaction("👎")
+
+    active_polls[poll_message.id] = {
+        "end_time": end_time,
+        "question": question,
+        "channel_id": ctx.channel.id
+    }
+
+    # Continuous countdown updater
+    while poll_message.id in active_polls:
+        remaining = int(end_time - time.time())
+        if remaining <= 0:
+            break
+        embed.set_footer(text=f"Time remaining: {format_time(remaining)}")
+        await poll_message.edit(embed=embed)
+        await asyncio.sleep(10)  # updates every 10 seconds
+
+    if poll_message.id in active_polls:  # not closed manually
+        await close_poll(poll_message.id, ctx.channel)
+
+
+@bot.command()
+async def closepoll(ctx, message_id: int):
+    """
+    Manually close a poll by its message ID.
+    Usage: !closepoll 123456789012345678
+    """
+    if message_id not in active_polls:
+        await ctx.send("❌ No active poll found with that ID.")
+        return
+
+    poll_info = active_polls[message_id]
+    channel = bot.get_channel(poll_info["channel_id"])
+    await close_poll(message_id, channel)
+    await ctx.send(f"✅ Poll `{poll_info['question']}` closed manually.")
+
+
+async def close_poll(message_id: int, channel):
+    """Helper function to finalize a poll"""
+    poll_info = active_polls[message_id]
+    msg = await channel.fetch_message(message_id)
+
+    thumbs_up = discord.utils.get(msg.reactions, emoji="👍")
+    thumbs_down = discord.utils.get(msg.reactions, emoji="👎")
+
+    upvotes = thumbs_up.count - 1 if thumbs_up else 0
+    downvotes = thumbs_down.count - 1 if thumbs_down else 0
+
+    result_embed = discord.Embed(
+        title="📌 Poll Closed",
+        description=f"**{poll_info['question']}**\n\n👍 {upvotes} | 👎 {downvotes}",
+        color=discord.Color.red()
+    )
+    await msg.edit(embed=result_embed)
+    await msg.clear_reactions()
+
+    del active_polls[message_id]         
 
 #Ban, Unban, Timeout, Kick                     
 # BAN
@@ -311,6 +420,7 @@ async def banned(ctx):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
