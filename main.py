@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ui import View, Button
+from discord.ui import Button, View
 import logging
 from dotenv import load_dotenv
 import os
@@ -140,43 +140,24 @@ async def taf(ctx, icao: str):
         await ctx.send(f"❌ Error fetching TAF: {e}")
 
 #Verification
-# Custom persistent view with Verify button
-class VerifyView(View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.success, custom_id="verify_button")
-    async def verify_button(self, interaction: discord.Interaction, button: Button):
-        role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
-        if role is None:
-            await interaction.response.send_message("❌ Verification role not found! Please ask an admin.", ephemeral=True)
-            return
-
-        if role in interaction.user.roles:
-            await interaction.response.send_message("⚠️ You are already verified!", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ You have been verified!", ephemeral=True)
-
-# Command to set up verification in a chosen channel
+# Command for admin to set up verification
 @bot.command()
 @commands.has_permissions(administrator=True)
 async def setupverify(ctx, channel: discord.TextChannel):
     embed = discord.Embed(
         title="🔒 Server Verification",
-        description="Click the **✅ Verify** button below to gain access to the server.",
+        description="Click the button below to gain access to the server.",
         color=discord.Color.green()
     )
     await channel.send(embed=embed, view=VerifyView())
-    await ctx.send(f"✅ Verification system has been set up in {channel.mention}", delete_after=5)
+    await ctx.send(f"✅ Verification system set up in {channel.mention}", delete_after=5)
 
-# When the bot is ready
+
+# Register persistent view when bot restarts
 @bot.event
 async def on_ready():
+    bot.add_view(VerifyView())  # THIS is what keeps button working after restart
     print(f"✅ Logged in as {bot.user}")
-    # Register persistent view (keeps buttons alive after restart)
-    bot.add_view(VerifyView())
-
 #Purging
 @bot.command()
 @commands.has_permissions(manage_messages=True)
@@ -208,6 +189,7 @@ async def poll(ctx, *, question):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
