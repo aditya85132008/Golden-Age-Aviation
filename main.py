@@ -14,12 +14,15 @@ import time
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 VERIFY_CHANNEL_ID = 1410464974152794212
-VERIFICATION_ROLE_ID = 1410459198042411070
+
+active_polls = {}
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
+intents.reactions = True
+intents.guilds = True
 
 bot = commands.Bot(command_prefix='!', intents=intents)
 ranks= "Cadet"
@@ -48,44 +51,43 @@ async def on_message(message):
     await bot.process_commands(message)
 
 #Verification
+# Create Verify button
+class VerifyView(View):
+    def __init__(self):
+        super().__init__(timeout=None)  # persistent view
 
+    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.success, custom_id="verify_button")
+    async def verify_button(self, interaction: discord.Interaction, button: Button):
+        role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
+        if role is None:
+            await interaction.response.send_message("❌ Verification role not found!", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.response.send_message("⚠️ You are already verified!", ephemeral=True)
+        else:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message("✅ You are now verified!", ephemeral=True)
+
+
+# Command for admin to set up verification
 @bot.command()
 @commands.has_permissions(administrator=True)
-async def setupverify(ctx):
-    """Send or update the verification embed (prevents duplicates)."""
-    channel = bot.get_channel(VERIFICATION_CHANNEL_ID)
-    role = ctx.guild.get_role(VERIFICATION_ROLE_ID)
-
+async def setupverify(ctx, channel: discord.TextChannel):
     embed = discord.Embed(
-        title="✅ Verification",
-        description="Click the button below to verify and gain access!",
-        color=discord.Color.gold()
+        title="🔒 Server Verification",
+        description="Click the button below to gain access to the server.",
+        color=discord.Color.green()
     )
+    await channel.send(embed=embed, view=VerifyView())
+    await ctx.send(f"✅ Verification system set up in {channel.mention}", delete_after=5)
 
-    view = discord.ui.View()
-    button = discord.ui.Button(label="Verify", style=discord.ButtonStyle.success)
 
-    async def button_callback(interaction):
-        if role not in interaction.user.roles:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("🎉 You are now verified!", ephemeral=True)
-        else:
-            await interaction.response.send_message("⚡ You are already verified.", ephemeral=True)
-
-    button.callback = button_callback
-    view.add_item(button)
-
-    # Check for existing verification message
-    async for message in channel.history(limit=50):  # scan last 50 messages
-        if message.author == bot.user and message.embeds:
-            if "Verification" in message.embeds[0].title:
-                await message.edit(embed=embed, view=view)
-                await ctx.send("♻️ Updated existing verification message.")
-                return
-
-    # If no existing message found, send a new one
-    await channel.send(embed=embed, view=view)
-    await ctx.send("✅ Verification embed has been posted!")
+# Register persistent view when bot restarts
+@bot.event
+async def on_ready():
+    bot.add_view(VerifyView())  # THIS is what keeps button working after restart
+    print(f"✅ Logged in as {bot.user}")
 
 #Embed Message
 @bot.command()
@@ -244,20 +246,18 @@ async def purge(ctx, amount: int, channel: discord.TextChannel = None, member: d
     
 #POLL
 def parse_time(time_str: str) -> int:
-    """Convert 1h30m, 2d, 45s style into seconds"""
-    time_regex = re.findall(r"(\d+)([dhms])", time_str.lower())
-    total_seconds = 0
-    for value, unit in time_regex:
+    import re
+    matches = re.findall(r"(\d+)([dhms])", time_str.lower())
+    total = 0
+    for value, unit in matches:
         value = int(value)
-        if unit == "d": total_seconds += value * 86400
-        elif unit == "h": total_seconds += value * 3600
-        elif unit == "m": total_seconds += value * 60
-        elif unit == "s": total_seconds += value
-    return total_seconds
-
+        if unit == "d": total += value * 86400
+        elif unit == "h": total += value * 3600
+        elif unit == "m": total += value * 60
+        elif unit == "s": total += value
+    return total
 
 def format_time(seconds: int) -> str:
-    """Convert seconds to 1d 2h 3m 4s format"""
     days, seconds = divmod(seconds, 86400)
     hours, seconds = divmod(seconds, 3600)
     minutes, seconds = divmod(seconds, 60)
@@ -268,87 +268,9 @@ def format_time(seconds: int) -> str:
     if seconds: parts.append(f"{seconds}s")
     return " ".join(parts)
 
-
-@bot.command()
-async def poll(ctx, duration: str, *, question: str):
-    """Create a poll with countdown. Example: !poll 1h30m Do you like pizza?"""
-
-    total_seconds = parse_time(duration)
-    if total_seconds <= 0:
-        await ctx.send("❌ Invalid time! Example: `1h30m`, `2d`, `45s`")
-        return
-
-    end_time = time.time() + total_seconds
-
-    embed = discord.Embed(
-        title="📊 New Poll",
-        description=question,
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Time remaining: {format_time(total_seconds)}")
-
-    poll_message = await ctx.send(embed=embed)
-    await poll_message.add_reaction("👍")
-    await poll_message.add_reaction("👎")
-
-    active_polls[poll_message.id] = {
-        "end_time": end_time,
-        "question": question,
-        "channel": ctx.channel
-    }
-
-    await ctx.send(f"✅ Poll created! (ID: `{poll_message.id}`)")
-
-    # Update countdown
-    while poll_message.id in active_polls:
-        remaining = int(end_time - time.time())
-        if remaining <= 0:
-            break
-        embed.set_footer(text=f"Time remaining: {format_time(remaining)}")
-        try:
-            await poll_message.edit(embed=embed)
-        except discord.NotFound:
-            break
-        await asyncio.sleep(10)
-
-    # Auto close
-    if poll_message.id in active_polls:
-        await close_poll(poll_message.id, ctx.channel)
-
-
-@bot.command()
-async def closepoll(ctx, message_id: int = None):
-    """Close a poll manually. 
-    Usage:
-    !closepoll → closes latest poll in this channel
-    !closepoll <id> → closes a specific poll
-    """
-    if message_id is None:
-        # Get the latest poll in this channel
-        polls_in_channel = [
-            pid for pid, info in active_polls.items()
-            if info["channel"].id == ctx.channel.id
-        ]
-        if not polls_in_channel:
-            await ctx.send("❌ No active polls in this channel.")
-            return
-        message_id = polls_in_channel[-1]  # last created poll in this channel
-
-    if message_id not in active_polls:
-        await ctx.send("❌ No active poll with that ID.")
-        return
-
-    await close_poll(message_id, ctx.channel)
-    await ctx.send("✅ Poll closed.")
-
-
 async def close_poll(message_id: int, channel):
-    """Finalize a poll"""
     poll_info = active_polls[message_id]
-    try:
-        msg = await channel.fetch_message(message_id)
-    except discord.NotFound:
-        return
+    msg = await channel.fetch_message(message_id)
 
     thumbs_up = discord.utils.get(msg.reactions, emoji="👍")
     thumbs_down = discord.utils.get(msg.reactions, emoji="👎")
@@ -361,10 +283,61 @@ async def close_poll(message_id: int, channel):
         description=f"**{poll_info['question']}**\n\n👍 {upvotes} | 👎 {downvotes}",
         color=discord.Color.red()
     )
+
     await msg.edit(embed=result_embed)
     await msg.clear_reactions()
-
     del active_polls[message_id]
+
+@bot.command()
+async def poll(ctx, duration: str, *, question: str):
+    total_seconds = parse_time(duration)
+    if total_seconds <= 0:
+        await ctx.send("❌ Invalid duration format!")
+        return
+
+    end_time = time.time() + total_seconds
+    embed = discord.Embed(title="📊 New Poll", description=question, color=discord.Color.blue())
+    embed.set_footer(text=f"Time remaining: {format_time(total_seconds)} | 👍 0 | 👎 0")
+    poll_message = await ctx.send(embed=embed)
+    await poll_message.add_reaction("👍")
+    await poll_message.add_reaction("👎")
+
+    active_polls[poll_message.id] = {
+        "question": question,
+        "channel_id": ctx.channel.id,
+        "end_time": end_time
+    }
+
+    while poll_message.id in active_polls:
+        remaining = int(end_time - time.time())
+        if remaining <= 0:
+            break
+
+        # Fetch latest reactions
+        msg = await ctx.channel.fetch_message(poll_message.id)
+        thumbs_up = discord.utils.get(msg.reactions, emoji="👍")
+        thumbs_down = discord.utils.get(msg.reactions, emoji="👎")
+
+        upvotes = thumbs_up.count - 1 if thumbs_up else 0
+        downvotes = thumbs_down.count - 1 if thumbs_down else 0
+
+        embed.set_footer(text=f"Time remaining: {format_time(remaining)} | 👍 {upvotes} | 👎 {downvotes}")
+        await poll_message.edit(embed=embed)
+        await asyncio.sleep(1)
+
+    if poll_message.id in active_polls:
+        await close_poll(poll_message.id, ctx.channel)
+
+@bot.command()
+async def closepoll(ctx, message_id: int):
+    if message_id not in active_polls:
+        await ctx.send("❌ No active poll with that ID.")
+        return
+
+    poll_info = active_polls[message_id]
+    channel = bot.get_channel(poll_info["channel_id"])
+    await close_poll(message_id, channel)
+    await ctx.send(f"✅ Poll '{poll_info['question']}' closed manually.")
 
 #Ban, Unban, Timeout, Kick                     
 # BAN
@@ -393,7 +366,6 @@ async def unban(ctx, user_id: int):
 async def kick(ctx, member: discord.Member, *, reason="No reason provided"):
     await member.kick(reason=reason)
     await ctx.send(f"👢 {member} has been kicked. Reason: {reason}")
-
 
 # MUTE (timeout)
 @bot.command()
@@ -430,10 +402,3 @@ async def banned(ctx):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
-
-
-
-
-
-
-
