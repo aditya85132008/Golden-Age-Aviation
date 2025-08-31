@@ -19,6 +19,7 @@ active_polls = {}
 
 handler = logging.FileHandler(filename='discord.log', encoding='utf-8', mode='w')
 intents = discord.Intents.default()
+intents = discord.Intents.all()
 intents.message_content = True
 intents.members = True
 intents.reactions = True
@@ -402,74 +403,177 @@ async def banned(ctx):
     await ctx.send(msg)
 
 #LOGS
-def get_log_channel(guild):
-    return guild.get_channel(LOG_CHANNEL_ID)
+def log_channel():
+    return bot.get_channel(LOG_CHANNEL_ID)
 
-# Log message edits
+# Utility to mention user without ping
+def user_ref(user: discord.User):
+    return f"<@{user.id}>"
+
+# ------------------- MESSAGE EVENTS ------------------- #
+@bot.event
+async def on_message_delete(message):
+    if message.author.bot: return
+    embed = discord.Embed(title="🗑️ Message Deleted", color=discord.Color.red())
+    embed.add_field(name="User", value=user_ref(message.author), inline=True)
+    embed.add_field(name="Channel", value=message.channel.mention, inline=True)
+    embed.add_field(name="Content", value=message.content or "*(embed/attachment)*", inline=False)
+    await log_channel().send(embed=embed)
+
 @bot.event
 async def on_message_edit(before, after):
-    if before.author == bot.user:
-        return
-    log_channel = get_log_channel(before.guild)
-    if log_channel and before.content != after.content:
-        await log_channel.send(
-            f"✏️ **Message edited** by {before.author} in {before.channel.mention}:\n"
-            f"Before: {before.content}\nAfter: {after.content}"
-        )
+    if before.author.bot: return
+    if before.content == after.content: return
+    embed = discord.Embed(title="✏️ Message Edited", color=discord.Color.orange())
+    embed.add_field(name="User", value=user_ref(before.author), inline=True)
+    embed.add_field(name="Channel", value=before.channel.mention, inline=True)
+    embed.add_field(name="Before", value=before.content or "*(embed/attachment)*", inline=False)
+    embed.add_field(name="After", value=after.content or "*(embed/attachment)*", inline=False)
+    await log_channel().send(embed=embed)
 
-# Log bulk deletes
 @bot.event
 async def on_bulk_message_delete(messages):
-    if not messages:
-        return
-    guild = messages[0].guild
-    channel = messages[0].channel
-    log_channel = get_log_channel(guild)
-    if log_channel:
-        await log_channel.send(
-            f"🗑️ **Bulk delete** in {channel.mention}:\n"
-            f"{len(messages)} messages were deleted."
-        )
+    embed = discord.Embed(title="🚮 Bulk Messages Deleted", color=discord.Color.dark_red())
+    embed.add_field(name="Channel", value=messages[0].channel.mention, inline=False)
+    embed.add_field(name="Count", value=str(len(messages)), inline=False)
+    await log_channel().send(embed=embed)
 
-# Log member joins
+# ------------------- INVITES ------------------- #
+@bot.event
+async def on_invite_create(invite):
+    embed = discord.Embed(title="🔗 Invite Created", color=discord.Color.green())
+    embed.add_field(name="Code", value=invite.code)
+    embed.add_field(name="Creator", value=user_ref(invite.inviter))
+    embed.add_field(name="Channel", value=invite.channel.mention)
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_invite_delete(invite):
+    embed = discord.Embed(title="❌ Invite Deleted", color=discord.Color.red())
+    embed.add_field(name="Code", value=invite.code)
+    await log_channel().send(embed=embed)
+
+# ------------------- MEMBER EVENTS ------------------- #
 @bot.event
 async def on_member_join(member):
-    log_channel = get_log_channel(member.guild)
-    if log_channel:
-        await log_channel.send(f"✅ **Member joined:** {member.mention} ({member})")
+    embed = discord.Embed(title="👋 Member Joined", color=discord.Color.green())
+    embed.add_field(name="User", value=user_ref(member))
+    await log_channel().send(embed=embed)
 
-# Log member leaves
 @bot.event
 async def on_member_remove(member):
-    log_channel = get_log_channel(member.guild)
-    if log_channel:
-        await log_channel.send(f"❌ **Member left:** {member.mention} ({member})")
+    embed = discord.Embed(title="🚪 Member Left", color=discord.Color.red())
+    embed.add_field(name="User", value=user_ref(member))
+    await log_channel().send(embed=embed)
 
-# Log role changes
 @bot.event
 async def on_member_update(before, after):
-    log_channel = get_log_channel(before.guild)
-    if log_channel:
-        added_roles = [r.name for r in after.roles if r not in before.roles]
-        removed_roles = [r.name for r in before.roles if r not in after.roles]
+    changes = []
+    if before.nick != after.nick:
+        changes.append(f"Nickname: `{before.nick}` ➝ `{after.nick}`")
+    if before.timed_out_until != after.timed_out_until:
+        changes.append(f"⏳ Timeout updated")
+    if before.roles != after.roles:
+        before_roles = {r.id for r in before.roles}
+        after_roles = {r.id for r in after.roles}
+        added = after_roles - before_roles
+        removed = before_roles - after_roles
+        if added:
+            for role in after.roles:
+                if role.id in added:
+                    changes.append(f"➕ Role Added: {role.name}")
+        if removed:
+            for role in before.roles:
+                if role.id in removed:
+                    changes.append(f"➖ Role Removed: {role.name}")
 
-        if added_roles:
-            await log_channel.send(
-                f"➕ **Roles added** to {after.mention}: {', '.join(added_roles)}"
-            )
-        if removed_roles:
-            await log_channel.send(
-                f"➖ **Roles removed** from {after.mention}: {', '.join(removed_roles)}"
-            )
+    if changes:
+        embed = discord.Embed(title="👤 Member Updated", color=discord.Color.blue())
+        embed.add_field(name="User", value=user_ref(after), inline=False)
+        embed.add_field(name="Changes", value="\n".join(changes), inline=False)
+        await log_channel().send(embed=embed)
 
-# Command to set the log channel
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setlog(ctx, channel: discord.TextChannel):
-    global LOG_CHANNEL_ID
-    LOG_CHANNEL_ID = channel.id
-    await ctx.send(f"✅ Logging enabled in {channel.mention}")
+# ------------------- BAN / UNBAN ------------------- #
+@bot.event
+async def on_member_ban(guild, user):
+    embed = discord.Embed(title="🔨 Member Banned", color=discord.Color.dark_red())
+    embed.add_field(name="User", value=user_ref(user))
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_member_unban(guild, user):
+    embed = discord.Embed(title="⚖️ Member Unbanned", color=discord.Color.green())
+    embed.add_field(name="User", value=user_ref(user))
+    await log_channel().send(embed=embed)
+
+# ------------------- ROLE EVENTS ------------------- #
+@bot.event
+async def on_guild_role_create(role):
+    embed = discord.Embed(title="🎭 Role Created", description=role.name, color=discord.Color.green())
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_guild_role_delete(role):
+    embed = discord.Embed(title="🗑️ Role Deleted", description=role.name, color=discord.Color.red())
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_guild_role_update(before, after):
+    embed = discord.Embed(title="📝 Role Updated", color=discord.Color.orange())
+    embed.add_field(name="Before", value=before.name, inline=True)
+    embed.add_field(name="After", value=after.name, inline=True)
+    await log_channel().send(embed=embed)
+
+# ------------------- CHANNEL EVENTS ------------------- #
+@bot.event
+async def on_guild_channel_create(channel):
+    embed = discord.Embed(title="📢 Channel Created", description=channel.name, color=discord.Color.green())
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_guild_channel_delete(channel):
+    embed = discord.Embed(title="❌ Channel Deleted", description=channel.name, color=discord.Color.red())
+    await log_channel().send(embed=embed)
+
+@bot.event
+async def on_guild_channel_update(before, after):
+    embed = discord.Embed(title="🔧 Channel Updated", color=discord.Color.orange())
+    embed.add_field(name="Before", value=before.name, inline=True)
+    embed.add_field(name="After", value=after.name, inline=True)
+    await log_channel().send(embed=embed)
+
+# ------------------- EMOJI EVENTS ------------------- #
+@bot.event
+async def on_guild_emojis_update(guild, before, after):
+    before_set = {e.id: e for e in before}
+    after_set = {e.id: e for e in after}
+    embed = discord.Embed(title="😃 Emoji Update", color=discord.Color.purple())
+
+    for e in after:
+        if e.id not in before_set:
+            embed.add_field(name="Emoji Created", value=e.name)
+    for e in before:
+        if e.id not in after_set:
+            embed.add_field(name="Emoji Deleted", value=e.name)
+    await log_channel().send(embed=embed)
+
+# ------------------- VOICE EVENTS ------------------- #
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if before.channel != after.channel:
+        if before.channel is None:
+            action = f"🎙️ Joined {after.channel.name}"
+        elif after.channel is None:
+            action = f"📴 Left {before.channel.name}"
+        else:
+            action = f"🔄 Moved {before.channel.name} ➝ {after.channel.name}"
+
+        embed = discord.Embed(title="🔊 Voice Update", color=discord.Color.teal())
+        embed.add_field(name="User", value=user_ref(member))
+        embed.add_field(name="Action", value=action)
+        await log_channel().send(embed=embed)
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
