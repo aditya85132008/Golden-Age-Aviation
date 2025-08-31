@@ -29,6 +29,7 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 ranks= "Cadet"
 VERIFICATION_ROLE_NAME="Verified"
 LOG_CHANNEL_ID = 1410457088290721812
+welcome_channel_id = None
 
 @bot.event
 async def on_ready():
@@ -51,6 +52,34 @@ async def on_message(message):
         await message.channel.send(f"{message.author.mention} dont use that word!")
 
     await bot.process_commands(message)
+
+#WELCOME
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+# Command to set the welcome channel
+@bot.command()
+@commands.has_permissions(manage_guild=True)
+async def setwelcome(ctx, channel: discord.TextChannel):
+    global welcome_channel_id
+    welcome_channel_id = channel.id
+    await ctx.send(f"✅ Welcome channel set to {channel.mention}")
+
+# Event for welcoming new members
+@bot.event
+async def on_member_join(member):
+    global welcome_channel_id
+    if welcome_channel_id:
+        channel = member.guild.get_channel(welcome_channel_id)
+        if channel:
+            embed = discord.Embed(
+                title="🎉 Welcome!",
+                description=f"Welcome to the server {member.mention}! 🎊",
+                color=discord.Color.green()
+            )
+            embed.set_thumbnail(url=member.display_avatar.url)
+            await channel.send(embed=embed)
 
 #Verification
 # Create Verify button
@@ -575,5 +604,6 @@ async def on_voice_state_update(member, before, after):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
