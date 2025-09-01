@@ -56,30 +56,41 @@ async def on_message(message):
     await bot.process_commands(message)
 
 #Verification
-class VerifyButton(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)  # no timeout for button
 
-    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.green, custom_id="verify_button")
-    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(VERIFIED_ROLE_ID)
-        if role:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ You are verified!", ephemeral=True)
+# View with Verify Button
+class VerifyView(View):
+    def __init__(self):
+        super().__init__(timeout=None)  # persistent view
+
+    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.success, custom_id="verify_button")
+    async def verify_button(self, interaction: discord.Interaction, button: Button):
+        role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
+        if role is None:
+            await interaction.response.send_message("❌ Verification role not found!", ephemeral=True)
+            return
+
+        if role in interaction.user.roles:
+            await interaction.response.send_message("⚠️ You are already verified!", ephemeral=True)
         else:
-            await interaction.response.send_message("⚠️ Role not found. Please contact staff.", ephemeral=True)
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message("✅ You are now verified!", ephemeral=True)
+
 
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
-    channel = bot.get_channel(VERIFICATION_CHANNEL_ID)
+
+    # Send Verify message automatically
+    channel = bot.get_channel(VERIFY_CHANNEL_ID)
     if channel:
         embed = discord.Embed(
-            title="🔒 Verification",
-            description="Click the button below to verify yourself and get access to the server!",
+            title="🔒 Server Verification",
+            description="Click the button below to verify and gain access to the server.",
             color=discord.Color.green()
         )
-        await channel.send(embed=embed, view=VerifyButton())
+        await channel.send(embed=embed, view=VerifyView())
+    else:
+        print("⚠️ Could not find the verification channel. Check VERIFY_CHANNEL_ID.")
 
 #Embed Message
 @bot.command()
@@ -614,6 +625,7 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
