@@ -14,6 +14,7 @@ import time
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 VERIFY_CHANNEL_ID = 1410464974152794212
+ROLE_CHANNEL_ID = 1410450848357548062
 
 active_polls = {}
 
@@ -602,8 +603,56 @@ async def on_voice_state_update(member, before, after):
         embed.add_field(name="Action", value=action)
         await log_channel().send(embed=embed)
 
+#SELF-ROLE
+# Replace with your role IDs
+ROLE_OPTIONS = {
+    "📢": 1412061430550757456,  # Alert
+    "💬": 1412061581520539708,  # NOTAM
+    "🔥": 1412061613342593044   # Activity
+}
+
+@bot.event
+async def on_ready():
+    print(f"{bot.user} is online!")
+
+@bot.command()
+async def selfrole(ctx):
+    """Send self-role embed in the fixed channel"""
+    channel = bot.get_channel(ROLE_CHANNEL_ID)
+
+    embed = discord.Embed(
+        title="Self Roles",
+        description="React to get your roles!\n\n" +
+                    "\n".join([f"{emoji} → <@&{role_id}>" for emoji, role_id in ROLE_OPTIONS.items()]),
+        color=discord.Color.blue()
+    )
+
+    message = await channel.send(embed=embed)
+
+    for emoji in ROLE_OPTIONS.keys():
+        await message.add_reaction(emoji)
+
+    await ctx.send(f"✅ Self-role embed posted in {channel.mention}")
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.channel_id == ROLE_CHANNEL_ID and str(payload.emoji) in ROLE_OPTIONS:
+        guild = bot.get_guild(payload.guild_id)
+        role = guild.get_role(ROLE_OPTIONS[str(payload.emoji)])
+        member = guild.get_member(payload.user_id)
+        if member is not None:
+            await member.add_roles(role)
+
+@bot.event
+async def on_raw_reaction_remove(payload):
+    if payload.channel_id == ROLE_CHANNEL_ID and str(payload.emoji) in ROLE_OPTIONS:
+        guild = bot.get_guild(payload.guild_id)
+        role = guild.get_role(ROLE_OPTIONS[str(payload.emoji)])
+        member = guild.get_member(payload.user_id)
+        if member is not None:
+            await member.remove_roles(role)
+
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
-
 
 
