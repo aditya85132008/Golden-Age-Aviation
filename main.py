@@ -14,6 +14,7 @@ import time
 load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 VERIFY_CHANNEL_ID = 1410464974152794212
+VERIFIED_ROLE_ID = 1410459198042411070
 ROLE_CHANNEL_ID = 1410450848357548062
 
 active_polls = {}
@@ -54,72 +55,31 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-#WELCOME
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-
-# Command to set the welcome channel
-@bot.command()
-@commands.has_permissions(manage_guild=True)
-async def setwelcome(ctx, channel: discord.TextChannel):
-    global welcome_channel_id
-    welcome_channel_id = channel.id
-    await ctx.send(f"✅ Welcome channel set to {channel.mention}")
-
-# Event for welcoming new members
-@bot.event
-async def on_member_join(member):
-    global welcome_channel_id
-    if welcome_channel_id:
-        channel = member.guild.get_channel(welcome_channel_id)
-        if channel:
-            embed = discord.Embed(
-                title="🎉 Welcome!",
-                description=f"Welcome to the server {member.mention}! 🎊",
-                color=discord.Color.green()
-            )
-            embed.set_thumbnail(url=member.display_avatar.url)
-            await channel.send(embed=embed)
-
 #Verification
-# Create Verify button
-class VerifyView(View):
+class VerifyButton(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None)  # persistent view
+        super().__init__(timeout=None)  # no timeout for button
 
-    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.success, custom_id="verify_button")
-    async def verify_button(self, interaction: discord.Interaction, button: Button):
-        role = discord.utils.get(interaction.guild.roles, name=VERIFICATION_ROLE_NAME)
-        if role is None:
-            await interaction.response.send_message("❌ Verification role not found!", ephemeral=True)
-            return
-
-        if role in interaction.user.roles:
-            await interaction.response.send_message("⚠️ You are already verified!", ephemeral=True)
-        else:
+    @discord.ui.button(label="✅ Verify", style=discord.ButtonStyle.green, custom_id="verify_button")
+    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(VERIFIED_ROLE_ID)
+        if role:
             await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ You are now verified!", ephemeral=True)
+            await interaction.response.send_message("✅ You are verified!", ephemeral=True)
+        else:
+            await interaction.response.send_message("⚠️ Role not found. Please contact staff.", ephemeral=True)
 
-
-# Command for admin to set up verification
-@bot.command()
-@commands.has_permissions(administrator=True)
-async def setupverify(ctx, channel: discord.TextChannel):
-    embed = discord.Embed(
-        title="🔒 Server Verification",
-        description="Click the button below to gain access to the server.",
-        color=discord.Color.green()
-    )
-    await channel.send(embed=embed, view=VerifyView())
-    await ctx.send(f"✅ Verification system set up in {channel.mention}", delete_after=5)
-
-
-# Register persistent view when bot restarts
 @bot.event
 async def on_ready():
-    bot.add_view(VerifyView())  # THIS is what keeps button working after restart
     print(f"✅ Logged in as {bot.user}")
+    channel = bot.get_channel(VERIFICATION_CHANNEL_ID)
+    if channel:
+        embed = discord.Embed(
+            title="🔒 Verification",
+            description="Click the button below to verify yourself and get access to the server!",
+            color=discord.Color.green()
+        )
+        await channel.send(embed=embed, view=VerifyButton())
 
 #Embed Message
 @bot.command()
@@ -654,5 +614,6 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
