@@ -23,6 +23,15 @@ load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 VERIFY_CHANNEL_ID = 1410464974152794212
 ROLE_CHANNEL_ID = 1410450848357548062
+GUILD_ID=1410169335712059394
+
+VAMSYS_API_BASE    = os.getenv("VAMSYS_API_BASE", "https://protocol.vamsys.dev").rstrip("/")
+VAMSYS_API_TOKEN   = os.getenv("VAMSYS_API_TOKEN")  # static bearer
+VAMSYS_CLIENT_ID   = os.getenv("VAMSYS_CLIENT_ID")
+VAMSYS_CLIENT_SECRET = os.getenv("VAMSYS_CLIENT_SECRET")
+VAMSYS_TOKEN_PATH  = os.getenv("VAMSYS_TOKEN_PATH", "/oauth/token")
+VAMSYS_LOOKUP_PATH = os.getenv("VAMSYS_LOOKUP_PATH", "/api/v3/integrations/discord/lookup")  # GET ?discord_id=<id>
+VAMSYS_TOKEN_URL     = os.getenv("VAMSYS_TOKEN_URL", "https://vamsys.io/oauth/token")
 
 active_polls = {}
 
@@ -766,14 +775,4 @@ async def on_raw_reaction_remove(payload):
             await member.remove_roles(role)
 
 webserver.keep_alive()
-bot.run(token, log_handler=handler, log_level=logging.DEBUG)
-
-
-
-
-
-
-
-
-
-
+bot.run(DISCORD_TOKEN, log_handler=handler, log_level=logging.DEBUG)
