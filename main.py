@@ -23,7 +23,6 @@ load_dotenv()
 token = os.getenv('DISCORD_TOKEN')
 VERIFY_CHANNEL_ID = 1410464974152794212
 ROLE_CHANNEL_ID = 1410450848357548062
-bot = commands.Bot(command_prefix="!", intents=intents)
 tree = bot.tree  # ✅ define this BEFORE using @tree.command
 
 active_polls = {}
@@ -768,6 +767,7 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
