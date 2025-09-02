@@ -508,25 +508,30 @@ async def on_voice_state_update(member, before, after):
         await log_channel().send(embed=embed)
 
 #SELF-ROLE
-# MULTIPLE SELF ROLES (Only One Reaction Per User)
-
+# MULTIPLE SELF ROLES CONFIG
 SELF_ROLE_CONFIGS = {
     # Channel 1 setup
-    123456789012345678: {  # Channel ID 1
-        "📢": 1412061430550757456,  # Alert
-        "💬": 1412061581520539708,  # NOTAM
-        "🔥": 1412061613342593044,  # Activity
+    1410450848357548062: {  # Replace with actual channel ID
+        "📢": 1412061430550757456,  # Role ID for Alerts
+        "💬": 1412061581520539708,  # Role ID for NOTAM
+        "🔥": 1412061613342593044,  # Role ID for Activity
     },
     # Channel 2 setup
-    987654321098765432: {  # Channel ID 2
-        "✅": 1410459198042411070,  # Verify
+    1410171967989878905: {  # Replace with actual channel ID
+        "✅": 1410459198042411070,  # Role ID for Verify
     }
 }
 
 
+@bot.event
+async def on_ready():
+    print(f"{bot.user} is online!")
+
+
 @bot.command()
+@commands.has_permissions(administrator=True)  # ✅ Only admins can use this
 async def selfrole(ctx, channel: discord.TextChannel):
-    """Post self-role embed in a specific channel"""
+    """Post a self-role embed in a given channel"""
     if channel.id not in SELF_ROLE_CONFIGS:
         await ctx.send("❌ This channel does not have a self-role setup.")
         return
@@ -542,14 +547,22 @@ async def selfrole(ctx, channel: discord.TextChannel):
 
     message = await channel.send(embed=embed)
 
+    # Add all emoji reactions to the message
     for emoji in role_map.keys():
         await message.add_reaction(emoji)
 
     await ctx.send(f"✅ Self-role embed posted in {channel.mention}")
 
 
+@selfrole.error
+async def selfrole_error(ctx, error):
+    if isinstance(error, commands.MissingPermissions):
+        await ctx.send("❌ You don’t have permission to run this command.")
+
+
 @bot.event
 async def on_raw_reaction_add(payload):
+    """Handles giving/removing roles instantly when a user reacts"""
     if payload.channel_id in SELF_ROLE_CONFIGS and str(payload.emoji) in SELF_ROLE_CONFIGS[payload.channel_id]:
         guild = bot.get_guild(payload.guild_id)
         role = guild.get_role(SELF_ROLE_CONFIGS[payload.channel_id][str(payload.emoji)])
@@ -559,22 +572,22 @@ async def on_raw_reaction_add(payload):
             channel = guild.get_channel(payload.channel_id)
             msg = await channel.fetch_message(payload.message_id)
 
-            # Remove any roles from same config before adding the new one
+            # Remove any other roles from this channel before adding new one
             for other_role_id in SELF_ROLE_CONFIGS[payload.channel_id].values():
                 other_role = guild.get_role(other_role_id)
                 if other_role in member.roles and other_role != role:
                     await member.remove_roles(other_role)
 
-            # Add the new role
+            # Give the new role
             await member.add_roles(role)
 
-            # Reset their reaction so the message stays clean
+            # Remove the user's reaction so it doesn't stack
             await msg.remove_reaction(payload.emoji, member)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    # Optional: if you still want role removal when reaction disappears
+    """Optional: remove role when user unreacts (can disable if not wanted)"""
     if payload.channel_id in SELF_ROLE_CONFIGS and str(payload.emoji) in SELF_ROLE_CONFIGS[payload.channel_id]:
         guild = bot.get_guild(payload.guild_id)
         role = guild.get_role(SELF_ROLE_CONFIGS[payload.channel_id][str(payload.emoji)])
@@ -584,4 +597,3 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(DISCORD_TOKEN, log_handler=handler, log_level=logging.DEBUG)
-
