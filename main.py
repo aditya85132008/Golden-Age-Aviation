@@ -229,8 +229,6 @@ async def on_member_join(member: discord.Member):
         try:
             await member.send(
                 "Welcome! I couldn't auto-verify you because your Discord account isn't linked in vAMSYS yet."
-
-"
                 "Please open **Phoenix → Profile → Preferences → Link Discord**, then ask a staff member to run `/syncroles` for you."
             )
         except Exception:
@@ -768,6 +766,7 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
