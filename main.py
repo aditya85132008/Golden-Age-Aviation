@@ -262,7 +262,7 @@ async def syncroles(interaction: discord.Interaction, member: Optional[discord.M
 
 async def main():
     try:
-        await bot.start(DISCORD_TOKEN)
+        await bot.start('DISCORD_TOKEN')
     finally:
         if session:
             await session.close()
@@ -767,6 +767,7 @@ async def on_raw_reaction_remove(payload):
 
 webserver.keep_alive()
 bot.run(token, log_handler=handler, log_level=logging.DEBUG)
+
 
 
 
